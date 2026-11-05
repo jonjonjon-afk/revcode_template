@@ -1,55 +1,58 @@
-# Milestone-gated AI project template
+# Milestone-gated AI project template (opencode)
 
-A way to build software with a cheaper coding agent (the **worker**) while a stronger model (the **reviewer**) and you (the **human**) keep it honest.
+Build software with a cheaper model while a **reviewer** agent keeps it honest. You talk to one agent; it manages the other.
 
-## The three roles
+```
+ you  <->  reviewer (primary agent)  ->  coder (subagent)
+           writes plan + rules           writes code, runs commands
+           audits the evidence      <-   returns a short report + raw proof
+```
 
+## Roles
 | Role | Does | Never does |
 |---|---|---|
-| Worker (coding agent in a harness with a shell) | Writes code and tests, runs commands, pastes real output, stops at gates | Declares success without pasted output; guesses APIs; widens scope |
-| Reviewer (a strong chat model, new chat per project is fine) | Reads the worker's report, audits it against the spec, writes the next message | Runs code. It can only judge evidence you paste |
-| Human (you) | Holds secrets, real accounts, real hardware facts; runs `make check` yourself now and then; approves each milestone | Pastes secrets into chat |
+| **You** | Describe the project, give real examples, hold secrets/accounts/hardware facts, approve each milestone, run `make check` yourself now and then | Paste secrets into chat |
+| **Reviewer** (`.opencode/agents/reviewer.md`) | Interviews you, fills `AGENTS.md` and `docs/SPEC.md`, writes requirements per milestone, delegates, audits evidence, gives a verdict | Writes application code; edits evidence; approves without proof |
+| **Coder** (`.opencode/agents/coder.md`) | Implements one assignment, runs commands through `scripts/ev.sh`, returns a short report | Declares success without proof; guesses APIs; widens scope; edits the spec or the reviewer's files |
 
 ## Files
-
-| File | Goes where | Purpose |
+| File | Written by | Purpose |
 |---|---|---|
-| `AGENTS.template.md` | repo root as `AGENTS.md` | How the worker must behave (rules, testing layers, evidence) |
-| `SPEC.template.md` | `docs/SPEC.md` | What to build, golden examples, milestones with gates, acceptance IDs |
-| `REVIEW_PLAYBOOK.md` | give to the reviewer | The audit checklist and the reply format |
+| `AGENTS.md` | reviewer (intake) | Rules for both agents. Loaded automatically by opencode. |
+| `docs/SPEC.md` | reviewer (intake) | What to build, golden examples, milestones with gates |
+| `docs/REVIEW_PLAYBOOK.md` | template | The reviewer's audit checklist and red flags |
+| `docs/reviews/M<n>.md` | reviewer | Requirements, gate, audit table, verdict, fixes (copy of `_TEMPLATE.md`) |
+| `docs/PROGRESS.md` | coder | Plan and status. The coder's memory between assignments |
+| `docs/EVIDENCE.md` | coder | Requirement ID -> test -> command -> result |
+| `docs/evidence/M<n>.md` | coder via `scripts/ev.sh` | Raw command output with exit codes |
+| `docs/OPEN_QUESTIONS.md`, `docs/api-notes.md` | coder | Questions with defaults; external facts tagged VERIFIED/UNVERIFIED |
+| `scripts/ev.sh` | template | Runs a command and appends its real output to the evidence file |
+| `opencode.json` | template | Makes the reviewer the default agent |
 
-The worker also keeps these (created in Milestone 0): `docs/PROGRESS.md` (plan and status), `docs/EVIDENCE.md` (requirement ID, test, command, result), `docs/api-notes.md` (each external fact tagged VERIFIED or UNVERIFIED with its source), `docs/OPEN_QUESTIONS.md` (questions with proposed defaults), `docs/evidence/` (pasted outputs per milestone).
+## Start a new project
+1. Copy these files into your project, keeping the paths. Run `opencode` in the repo. The reviewer opens by default.
+2. Pick the model in opencode. Leave `model:` unset in both agent files and the coder inherits the reviewer's model. To use different models, uncomment `model:` in an agent file (`opencode models` lists the ids).
+3. Tell the reviewer what you want, for example: *"I want to build X for Y. Start intake."* It asks up to 5 questions at a time. The most valuable thing you can give it is **real examples** (input and expected output, from real data, screenshots or a reference tool).
+4. The reviewer fills `AGENTS.md` and `docs/SPEC.md`, shows you a summary and waits. Read it. Check nothing is left: `grep -rn "<<FILL" AGENTS.md docs/SPEC.md` must print nothing.
+5. Do the human-only tasks it lists (credentials, reference repos in a gitignored `reference/`, tools to install, captures). Never paste secrets into chat.
+6. Say "go". The reviewer writes `docs/reviews/M0.md`, delegates to the coder, audits, and reports. Approve each milestone before it starts the next. After approval, a fresh session (`/new`) per milestone keeps context clean; the files carry all state.
 
-## Starting a new project (about 45 minutes)
+## Running on DeepSeek V4.1 Flash 1017
+- The 1M-token context is not the bottleneck. Instruction drift is. That is why the formats are fixed and short, requirements are capped at 8 per round, and the files (not chat history) hold the state.
+- Keep `AGENTS.md` and the agent files unchanged during a session: a stable prompt prefix is what prompt caching rewards.
+- The model has several reasoning levels (High is the default). If your provider exposes them as variants in opencode, use High or Max for the reviewer, where the audit happens, and Medium for the coder if you want to save cost.
+- `steps: 80` caps each agent run. If a milestone gets cut off, the coder reports `INCOMPLETE`; raise `steps` in the agent file.
+- Watch for loops, hand-typed evidence, and tests edited to pass. The red-flag list in `docs/REVIEW_PLAYBOOK.md` covers these.
 
-1. Copy the templates in. Fill every `[BRACKET]`. The golden examples in the spec matter most: real input and output pairs, taken from screenshots, real data or a reference tool.
-2. Write the milestones. Keep the standard order (see the spec template) and make each gate a command with an expected result.
-3. Before the worker starts, handle the human-only tasks: clone reference repos into `reference/`, gitignore them, install the tools the e2e tests need (tmux, a browser driver), and capture any logged-in fixtures with a script that never prints secrets.
-4. Open the worker with the kickoff prompt below. Always start with Milestone 0 and stop.
-5. After each report: paste the report and the previous requirements list to the reviewer using `REVIEW_PLAYBOOK.md`. Send the worker the reviewer's paste-back block. Repeat.
-
-## Kickoff prompt for the worker
-
-```
-You are building [PROJECT]. Read AGENTS.md and docs/SPEC.md in full and follow them
-exactly. Reference material is in reference/ (read-only).
-
-Start with Milestone 0 only (recon and planning, no app code). Then STOP and report:
-what you learned, what is still unknown, and which files or facts you need from me.
-Wait for my approval before Milestone 1.
-
-Rules that matter most: never claim something works without pasting real command
-output into docs/evidence/; never guess external API shapes; never write library APIs
-from memory; keep docs/PROGRESS.md current.
-```
+## What the reviewer can and cannot do
+It can read the repo and git history, edit `AGENTS.md`, `docs/SPEC.md` and `docs/reviews/*`, and run `make check` itself to compare against the coder's evidence. It cannot run anything else. Live runs, `make e2e` and comparisons with a trusted source stay with you. If you want a stricter reviewer, delete the `"make check*": allow` line in `reviewer.md`.
 
 ## Lessons from the first project
-
-- **Put human-only tasks first.** Credentials, real captures and hardware facts blocked a milestone late. Ask for them in Milestone 0.
-- **Never send a message with unfilled placeholders.** The worker will stop, correctly.
+- **Put human-only tasks first.** Credentials, real captures and hardware facts blocked a milestone late. Ask for them in M0.
+- **Never delegate with unfilled placeholders.** The coder will stop, correctly.
 - **Say which order dimensions come in** (rows x cols, width x height).
 - **Ask for named tests.** "Add a test that X" gets a different test unless you name the behaviour and its expected value.
-- **Keep paste-backs short.** Approval, numbered fixes, next-milestone additions. Long messages get partly skipped.
+- **Keep messages short.** Approval, numbered fixes, next-milestone additions. Long messages get partly skipped.
 - **Safe by default.** Read-only first, destructive actions behind explicit flags, dry-run for anything that deletes.
 - **Run `make check` yourself** every few milestones. Evidence is only as honest as its source.
 - **Mock data must never touch real data:** separate files per source.
