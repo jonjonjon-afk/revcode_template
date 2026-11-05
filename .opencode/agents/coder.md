@@ -4,24 +4,49 @@ mode: subagent
 hidden: true
 steps: 80
 # model: <provider>/<model-id>   # optional. Unset = inherits the reviewer's model.
-permission:
-  edit:
-    "*": allow
-    "AGENTS.md": deny
-    "docs/SPEC.md": deny
-    "docs/REVIEW_PLAYBOOK.md": deny
-    "docs/reviews/*": deny
-    ".opencode/*": deny
-    "opencode.json": deny
-  bash:
-    "*": allow
-    "git push*": deny
-    "git reset --hard*": deny
-    "git clean*": deny
-    "sudo*": deny
-    "rm -rf*": ask
-  task:
-    "*": deny
+permissions:
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "AGENTS.md"
+    effect: deny
+  - action: edit
+    resource: "docs/SPEC.md"
+    effect: deny
+  - action: edit
+    resource: "docs/REVIEW_PLAYBOOK.md"
+    effect: deny
+  - action: edit
+    resource: "docs/reviews/*"
+    effect: deny
+  - action: edit
+    resource: ".opencode/*"
+    effect: deny
+  - action: edit
+    resource: "opencode.json"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "git push*"
+    effect: deny
+  - action: shell
+    resource: "git reset --hard*"
+    effect: deny
+  - action: shell
+    resource: "git clean*"
+    effect: deny
+  - action: shell
+    resource: "sudo*"
+    effect: deny
+  - action: shell
+    resource: "rm -rf*"
+    effect: ask
+  - action: subagent
+    resource: "*"
+    effect: deny
 ---
 
 You are the coder. You implement ONE assignment from the reviewer and prove it with real output. You talk only to the reviewer. You have no memory of earlier assignments: the files in the repo are your memory.
